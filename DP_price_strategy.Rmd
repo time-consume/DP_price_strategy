@@ -1,0 +1,385 @@
+---
+title: "DP programming on Price Strategy"
+author: "Yicheng"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    fig_caption: true
+    theme: flatly
+    css: styles.css
+---
+
+
+#  Problem sets:  
+
+
+My boss invested an ice cream store. I operate the store from 7am to 7pm.
+
+The wholesale price of an ice cream is 1 dollar, the salvage price is 0.5 dollar.  
+
+The demand follows a Poisson process with the hourly arrival rate = 10-2*price of the ice cream.  
+
+For example, if the price of an ice cream is $1, then the average demand per hour is 8;  
+
+if price of an ice cream is $1.5, then the average demand per hour is 7 customers.  
+
+The price of the ice cream should not exceed 5$.   
+
+The ice cream order needs to be place the night before. Any left-over ice-cream from the day can only be given to the charity (for the salvage value of $0.5).  
+
+My boss gives me the freedom to decide on the price -- I can change the selling price based on the time of the day and how many ice creams left by this time.  
+There is only one constraint: one price for morning (7am-12pm), one price for the afternoon (12pm-6pm, etc.) and one price for the evening (6pm-7pm).  
+So at the three time points, 7am, noon and 6pm, I can make price changes, which will affect your demand rate.
+
+
+#  Solution
+
+
+Set the search range and global parameter
+
+```{r}
+#Search range
+start<-2.8
+end<-3.2
+interval<-0.1
+
+#Global parameter
+ps=0.5
+qn<-c(2:8)
+qa<-c(25:40)
+qm<-c(45:65)
+
+```
+
+Dynamic programming, from backwards searching for the optimal order quantity under each price.  
+
+
+##  Price_Stage1
+
+
+```{r echo=FALSE}
+#Night function
+myfun1<-function(start,end,interval){
+  x<-c();y<-c();z<-c()
+  for (p in seq(start,end,interval)) {
+    all<-matrix(0,nrow = 100,ncol=length(qn))
+    for (k in 1:100) {
+      n<-rpois(100,10-2*p)
+      profit<-matrix(0,nrow=length(qn),ncol=100)
+      for (i in 1:length(qn)) {
+        for (j in 1:100) {
+          if(qn[i]<n[j]){
+            profit[i,j]<-p*qn[i]-1*qn[i]
+          }else{
+            profit[i,j]<-p*n[j]+ps*(qn[i]-n[j])-1*qn[i]
+          }
+        }
+      }
+      profit<-t(profit)
+      all[k,]<-apply(profit, 2, mean)
+    }
+    level<-apply(all, 2, mean)
+    x<-append(x,p);y<-append(y,qn[which.max(level)]);z<-append(z,max(level))
+    output<-data.frame(x,y,z)
+  }
+  colnames(output)<-c("price","order_qnuantity","profit")
+  return(output)
+}
+```
+
+Get strategy for night
+
+```{r}
+#return price and order qnuantity for night
+q1<-myfun1(start,end,interval)
+q1
+#Price for the night
+pn<-q1[which.max(q1$profit),1]
+```
+
+
+Using the price we get from previous function to apply to afternoon situation  
+
+
+##  Price_Stage2
+
+
+```{r echo=FALSE}
+myfun2<-function(start,end,interval){
+  x<-c();y<-c();z<-c()
+  for (pa in seq(start,end,interval)) {
+    all<-matrix(0,nrow = 100,ncol=length(qa))
+    for (k in 1:100) {
+      afternoon<-rpois(100,(10-2*pa)*6)
+      night<-rpois(100,(10-2*pn))
+      profit<-matrix(0,nrow=length(qa),ncol=100)
+      for (i in c(1:length(qa))) {
+        for (j in 1:100) {
+          if(qa[i]<afternoon[j]){
+            profit[i,j]<-pa*qa[i]-1*qa[i]
+          }else if(qa[i]<afternoon[j]+night[j]){
+            profit[i,j]<-pa*afternoon[j]+pn*(qa[i]-afternoon[j])-1*qa[i]
+          }else{
+            profit[i,j]<-pa*afternoon[j]+pn*night[j]+ps*(qa[i]-afternoon[j]-night[j])-1*qa[i]
+          }
+        }
+      }
+      profit<-t(profit)
+      all[k,]<-apply(profit, 2, mean)
+    }
+    level<-apply(all, 2, mean)
+    x<-append(x,pa);y<-append(y,qa[which.max(level)]);z<-append(z,max(level))
+    output<-data.frame(x,y,z)
+  }
+  colnames(output)<-c("price","order_quantity","profit")
+  return(output)
+}
+```
+
+Get strategy for afternoon
+
+```{r}
+#This is the result
+q2<-myfun2(start,end,interval)
+q2
+#Price for the afternoon
+pa<-q2[which.max(q2$profit),1]
+```
+
+Using the price we get from previous function to apply to morning situation  
+
+
+##  Price_Stage3
+
+
+
+```{r echo=FALSE}
+#Morning function
+myfun3<-function(start,end,interval){
+  x<-c()
+  y<-c()
+  z<-c()
+  for (pm in seq(start,end,interval)) {
+    all<-matrix(0,nrow = 100,ncol=length(qm))
+    for (k in 1:100) {
+      morning<-rpois(100,(10-2*pm)*5)
+      afternoon<-rpois(100,(10-2*pa)*6)
+      night<-rpois(100,(10-2*pn))
+      profit<-matrix(0,nrow=length(qm),ncol=100)
+      for (i in c(1:length(qm))) {
+        for (j in 1:100) {
+          if(qm[i]<morning[j]){
+            profit[i,j]<-pm*qm[i]-1*qm[i]
+          }else if(qm[i]<morning[j]+afternoon[j]){
+            profit[i,j]<-pm*morning[j]+pa*(qm[i]-morning[j])-1*qm[i]
+          }else if(qm[i]<morning[j]+afternoon[j]+night[j]){
+            profit[i,j]<-pm*morning[j]+pa*afternoon[j]+pn*(qm[i]-morning[j]-afternoon[j])-1*qm[i]
+          }else{
+            profit[i,j]<-pm*morning[j]+pa*afternoon[j]+pn*night[j]+ps*(qm[i]-morning[j]-afternoon[j]-night[j])-1*qm[i]
+          }
+        }
+      }
+      profit<-t(profit)
+      all[k,]<-apply(profit, 2, mean)
+    }
+    level<-apply(all, 2, mean)
+    x<-append(x,pm)
+    y<-append(y,qm[which.max(level)])
+    z<-append(z,max(level))
+    output<-data.frame(x,y,z)
+  }
+  colnames(output)<-c("price","order_quantity","profit")
+  return(output)
+}
+```
+
+Get strategy for morning
+
+```{r}
+#This is the result
+q3<-myfun3(start,end,interval)
+q3
+#Price for the morning
+pm<-q3[which.max(q3$profit),1]
+```
+
+
+Get a price strategy output without considering inventory
+
+```{r}
+#optimal
+output<-data.frame(t(q1[which.max(q1$profit),]),t(q2[which.max(q2$profit),]),t(q3[which.max(q3$profit),]))
+colnames(output)<-c("night","afternoon","morning")
+output<-output[,order(-output[3,])]
+output
+
+#search range output
+fancy<-data.frame(q1,q2$order_quantity,q2$profit,q3$order_quantity,q3$profit)
+colnames(fancy)<-c("price","n_q","n_p","a_q","a_p","m_q","m_p")
+```
+
+If we consider price strategy with inventory, we can also use DP to solve the problem  
+
+From backwards searching for the optimal price under each inventory level.  
+
+
+##  Inventory_Stage1
+
+(take a while based on computer performance)
+
+
+```{r echo=FALSE}
+ts1<-function(){
+  p<-seq(1,5,0.1);days<-100;ps<-0.5;q<-c(1:15);all<-c(1:100);inventory<-c(1:length(q))
+  find<-function(q){
+    for (w in 1:100) {
+      profit<-matrix(0,nrow = length(p),ncol = (days))
+      for (i in 1:length(p)) {
+        night<-rpois(days,10-2*p[i])
+        for (j in 1:days) {
+          if(q<night[j]){
+            profit[i,j]<-q*p[i]-q
+          }else{
+            profit[i,j]<-night[j]*p[i]+(q-night[j])*ps-q
+          }
+        }
+      }
+      mean<-rowMeans(profit);which.max(mean);p[which.max(mean)];all[w]<-p[which.max(mean)]
+    }
+    return(mean(all))
+  }
+  for (k in 1:length(q)) {
+    inventory[k]<-find(q[k])
+  }
+  output<-data.frame(inventory,q)
+  colnames(output)<-c("price","inventory")
+  return(output)
+  
+}
+inventory1<-ts1()
+```
+
+Once at the stage of night, we would like to adjust price according to inventory left.  
+
+For example, if there is only one left, we would like to set a higher price above $4.  
+
+
+
+```{r}
+library(ggplot2)
+ggplot(inventory1,aes(x=inventory,y=price))+geom_point()
+```
+
+
+##  Inventory_Stage2
+
+(take a while based on computer performance)
+
+
+```{r echo=FALSE}
+ts2<-function(){
+  p<-seq(1,5,0.1);days<-100;ps<-0.5;q<-c(25:45);all<-c(1:100);inventory<-c(1:length(q))
+  find<-function(q){
+    for (w in 1:100) {
+      profit<-matrix(0,nrow = length(p),ncol = (days))
+      for (i in 1:length(p)) {
+        afternoon<-rpois(days,(10-2*p[i])*6)
+        night<-rpois(days,10-2*pn)
+        for (j in 1:days) {
+          if(q<afternoon[j]){
+            profit[i,j]<-q*p[i]-q
+          }else if(q<afternoon[j]+night[j]){
+            profit[i,j]<-p[i]*afternoon[j]+pn*(q-afternoon[j])-q
+          }else{
+            profit[i,j]<-p[i]*afternoon[j]+pn*night[j]+ps*(q-afternoon[j]-night[j])-q
+          }
+        }
+      }
+      mean<-rowMeans(profit);which.max(mean);p[which.max(mean)];all[w]<-p[which.max(mean)]
+    }
+    return(mean(all))
+  }
+  for (k in 1:length(q)) {
+    inventory[k]<-find(q[k])
+  }
+  output<-data.frame(inventory,q)
+  colnames(output)<-c("price","inventory")
+  return(output)
+  
+}
+inventory2<-ts2()
+```
+
+Once at the stage of afternoon, we would like to adjust price according to inventory left.  
+
+For example, if there is 30 icecream left, we would like to set a price approx at $3.1.  
+
+
+```{r}
+ggplot(inventory2,aes(x=inventory,y=price))+geom_point()
+```
+
+
+
+##  Inventory_Stage3
+
+(take a while based on computer performance)
+
+
+
+```{r echo=FALSE}
+#Inventory adjustment for morning
+ts3<-function(){
+  p<-seq(1,5,0.1);days<-100;ps<-0.5;q<-c(45:65);all<-c(1:100);inventory<-c(1:length(q))
+  find<-function(q){
+    for (w in 1:100) {
+      profit<-matrix(0,nrow = length(p),ncol = (days))
+      for (i in 1:length(p)){
+        morning<-rpois(days,(10-2*p[i])*5)
+        afternoon<-rpois(days,(10-2*pa)*6)
+        night<-rpois(days,10-2*pn)
+        for (j in 1:days) {
+          if(q<morning[j]){
+            profit[i,j]<-q*p[i]-q
+          }else if(q<afternoon[j]+morning[j]){
+            profit[i,j]<-p[i]*morning[j]+pa*(q-morning[j])-q
+          }else if(q<afternoon[j]+morning[j]+night[j]){
+            profit[i,j]<-p[i]*morning[j]+pa*afternoon[j]+pn*(q-morning[j]-afternoon[j])-q
+          }else{
+            profit[i,j]<-p[i]*morning[j]+pa*afternoon[j]+pn*night[j]+ps*(q-morning[j]-afternoon[j]-night[j])-q
+          }
+        }
+      }
+      mean<-rowMeans(profit);which.max(mean);p[which.max(mean)];all[w]<-p[which.max(mean)]
+    }
+    return(mean(all))
+  }
+  for (k in 1:length(q)) {
+    inventory[k]<-find(q[k])
+  }
+  output<-data.frame(inventory,q)
+  colnames(output)<-c("price","inventory")
+  return(output)
+}
+inventory3<-ts3()
+```
+
+Once at the stage of morning , we would like to adjust price according to inventory left.  
+
+But since we would have a fixed order quantity, and inventory in the morning is the same as order quantity,  
+
+we will just use the optimal order quantity and the price in accordance
+
+```{r}
+ggplot(inventory3,aes(x=inventory,y=price))+geom_point()
+```
+
+And that's pretty much it  
+
+For further work, we can do more general work (real-time change) to make the price strategy to be more smart  
+
+and simulate a more 'real' market environment  
+
+![My school logo](/Users/yichenghu/Documents/GitHub/push/logo_case.png)
+
