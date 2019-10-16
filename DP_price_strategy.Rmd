@@ -3,13 +3,14 @@ title: "DP programming on Price Strategy"
 author: "Yicheng"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
+  pdf_document:
+    toc: yes
   html_document:
-    toc: true
-    fig_caption: true
-    theme: flatly
     css: styles.css
+    fig_caption: yes
+    theme: flatly
+    toc: yes
 ---
-
 
 #  Problem sets:  
 
@@ -381,5 +382,6 @@ For further work, we can do more general work (real-time change) to make the pri
 
 and simulate a more 'real' market environment  
 
-![My school logo](/Users/yichenghu/Documents/GitHub/push/logo_case.png)
+![My school logo](/Users/yichenghu/Documents/GitHub/DP_price_strategy/logo_case.png)  
+
 
