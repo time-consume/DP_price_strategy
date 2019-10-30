@@ -7,3 +7,4 @@ This strategy helps you set your:
 This strategy also helps you:  
 1.Adjust your price according to time and inventory level  
 
+#see if you can check this change
